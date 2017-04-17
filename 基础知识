@@ -1,0 +1,47 @@
+Job：具体需要执行的任务，一般而言，我们需要自定义Jpb，实现Quartz的Job接口，该接口仅有一个方法，类似于Runnable，我们需要做的就是实现它的execute方法
+    在Quartz中，每次Schedule执行Job时候，在调用它的execute方法之前，它需要根据JobDetail提供的Job类型创建一个Job class的实例。任务执行完后，job class
+    的实例会被丢弃，jvm活负责回收它
+    在实现自己的Job时候，我们需要注意：
+      1.不要定义静态类型
+      2.必须提供无参构造器
+    Quartz的Job接口定义如下：
+      public interface Job {
+        void execute(JobExecutionContext context) throws JobExecutionException;
+      }
+     入参的JobExecutionContext,里面存储了Job运行时的所有信息：执行它的触发器句柄，job对应的JobDetail信息等等，jobDetail实在Job被加到调度器里
+     创建的
+     JobExecutionContext让Job能访问Quartz运行时候环境和Job本身的参数详情，我们可以以selvlet和ServletContext来类别思考
+     通过JobExecutionContext，我们可以访问到所处环境的所有信息，包括注册到Scheduler上与该Job相关联的JobDetail和Triger
+     	public void execute(JobExecutionContext context) throws JobExecutionException {
+		    //获取JobDetail
+		    JobDetail jobDetail = context.getJobDetail();
+	    }
+JobDetail：该任务的信息，包括具体执行的任务以及其他一些相关的信息
+    JobDetail是通过JobBuilder类来创建的：
+      JobDetail job = JobBuilder.newJob(MyJob.class).withIdentity("job1", "group1").build();
+    对于注册在Scheduler上的每一个的Job，只创建了一份JobDetail实例.JobDetail 被加到 Scheduler 中，
+    而不是 job。Job 类是作为 JobDetail 的一部份，但是它直到 Scheduler 准备要执行它的时候才会被实例化的。
+    直到执行时才会创建 Job 实例 
+
+  Job 的实例要到该执行它们的时候才会实例化出来。每次 Job 被执行，一个新的 Job 实例会被创建。
+  其中暗含的意思就是你的 Job 不必担心线程安全性，因为同一时刻仅有一个线程去执行给定 Job 类的实例，甚至是并发执行同一 Job 也是如此
+  但是，那么如何给job实例增加属性或配置呢？如何在job的多次执行中，跟踪job的状态呢？答案就是:JobDataMap，JobDetail对象的一部分。
+  
+JobDataMap
+  JobDataMap是一个Quartz封装的Map结构，当一个Job被加入到Scheduler中时候，JobDataMap会被保存
+  JobDataMap在JobDetail中的使用：
+    		JobDetail job = JobBuilder.newJob(MyJob.class)
+					.withIdentity("job1", "group1")
+					.usingJobData("key", 1)    ---->这里往JobDataMap里加入键值对
+					.build();
+   JobDataMap在Triger中的使用
+   			Trigger trigger = TriggerBuilder.newTrigger().withIdentity("trigger1", "group1").startNow()
+					.withSchedule(simpleScheduleBuilder)
+					.usingJobData("value", 1)    --->这里往Trigger中加入了键值对
+					.build();
+Trigger：触发器
+  Trigger是使用TriggerBuilder来创建的
+  Trigger是用来出发执行Job的。当调用一个Job时，我们呢实例一个触发器然后调整它的属性来满足job执行的条件。
+  差发起也有一个和他相关的JobDataMap，他是用来给触发器触发的job传输参数的
+Scheduler：任务调度器
+Misfire：错过的，指本来应该被执行但是实际没有被执行的任务调度
